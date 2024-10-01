@@ -58,7 +58,7 @@ def save_data(email, password):
         "HWID": hwid,
         "Email": email,
         "Password": password,
-        "SaveCredentials": save_credentials.get()  # Save the checkbox state
+        "SaveCredentials": save_credentials.get()
     }
 
     try:
@@ -72,7 +72,6 @@ def read_data():
         try:
             with open("account.json", "r") as file:
                 data = json.load(file)
-                # Ensure that SaveCredentials is set to False if not in the data
                 if "SaveCredentials" not in data:
                     data["SaveCredentials"] = False
                 return data
@@ -93,7 +92,7 @@ def on_login_submit():
         if save_credentials.get():
             save_data(email, password)
         messagebox.showinfo("Welcome", "Login successful!")
-        create_config_interface()
+        messagebox.showifo("W.I.P", "Soon!")
     else:
         messagebox.showwarning("Warning", "Invalid email or password.")
 
@@ -108,7 +107,7 @@ def on_register_submit():
     if validate_email(email):
         add_hwid(get_hwid(), email, password)
         messagebox.showinfo("Success", "Registration successful!")
-        register_window.destroy()  # Close the registration window
+        register_window.destroy()
     else:
         messagebox.showwarning("Warning", "Invalid email.")
 
@@ -125,11 +124,10 @@ def create_login_interface():
     root.geometry("300x250")
     center_window(root, 300, 250)
 
-    # Clear existing widgets
     for widget in root.winfo_children():
         widget.destroy()
 
-    root.configure(bg='black')  # Set background to black
+    root.configure(bg='black')
 
     tk.Label(root, text="Enter Email:", bg='black', fg='white').pack(pady=(5, 0))
     entry_email = tk.Entry(root, bg='darkgray', fg='white', bd=2, highlightbackground='white', highlightcolor='white')
@@ -139,7 +137,6 @@ def create_login_interface():
     entry_password = tk.Entry(root, show='*', bg='darkgray', fg='white', bd=2, highlightbackground='white', highlightcolor='white')
     entry_password.pack(pady=(0, 10))
 
-    # Create checkbox with green checkmark
     tk.Checkbutton(root, text="Save credentials", variable=save_credentials, bg='gray', fg='black', selectcolor='white').pack(pady=(5, 10))
 
     button_login = tk.Button(root, text="Login", command=on_login_submit, bg='white', fg='black')
@@ -163,7 +160,7 @@ def create_register_interface():
     register_window.geometry("300x200")
     center_window(register_window, 300, 200)
 
-    register_window.configure(bg='black')  # Set background to black
+    register_window.configure(bg='black')
 
     tk.Label(register_window, text="Enter Email:", bg='black', fg='white').pack(pady=(5, 0))
     entry_register_email = tk.Entry(register_window, bg='darkgray', fg='white', bd=2, highlightbackground='white', highlightcolor='white')
@@ -178,7 +175,7 @@ def create_register_interface():
 
 def create_config_interface():
     root.withdraw()
-    exe = "ReLauncherRoblox.exe"
+    exe = ""
     exe_path = os.path.join(os.path.dirname(__file__), exe)
 
     if os.path.exists(exe_path):
@@ -194,7 +191,6 @@ def center_window(window, width, height):
     
     window.geometry(f"{width}x{height}+{pos_x}+{pos_y}")
 
-# Start the application
 create_database()
 create_login_interface()
 root.mainloop()
