@@ -1,3 +1,4 @@
+import sqlite3
 import platform
 import uuid
 import json
@@ -5,7 +6,10 @@ import tkinter as tk
 from tkinter import messagebox
 import os
 import re
+import hashlib
 import subprocess
+
+root = tk.Tk()
 
 def get_hwid():
     system_info = platform.uname()
@@ -13,150 +17,184 @@ def get_hwid():
     hwid = f"{system_info.system}-{system_info.node}-{system_info.release}-{mac}"
     return hwid
 
-def salvar_dados(email, senha):
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def create_database():
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    cursor.execute('''CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        hwid TEXT NOT NULL,
+        email TEXT NOT NULL UNIQUE,
+        password TEXT NOT NULL
+    )''')
+    conn.commit()
+    conn.close()
+
+def add_hwid(hwid, email, password):
+    password_hash = hash_password(password)
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    try:
+        cursor.execute('INSERT INTO users (hwid, email, password) VALUES (?, ?, ?)', (hwid, email, password_hash))
+        conn.commit()
+    except sqlite3.IntegrityError:
+        messagebox.showwarning("Warning", "Email is already registered.")
+    finally:
+        conn.close()
+
+def verify_login(email, password):
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM users WHERE email = ? AND password = ?', (email, hash_password(password)))
+    user = cursor.fetchone()
+    conn.close()
+    return user
+
+def save_data(email, password):
     hwid = get_hwid()
     data = {
         "HWID": hwid,
         "Email": email,
-        "Senha": senha,
+        "Password": password,
+        "SaveCredentials": save_credentials.get()  # Save the checkbox state
     }
-    
+
     try:
-        with open("data.json", "w") as file:
+        with open("account.json", "w") as file:
             json.dump(data, file)
     except Exception as e:
-        messagebox.showerror("Erro", f"Erro ao salvar data: {e}")
+        messagebox.showerror("Error", f"Error saving data: {e}")
 
-def salvar_config(config_data):
-    try:
-        with open("config.json", "w") as file:
-            json.dump(config_data, file)
-    except Exception as e:
-        messagebox.showerror("Erro", f"Erro ao salvar configuração: {e}")
-
-def read():
-    if os.path.exists("data.json"):
+def read_data():
+    if os.path.exists("account.json"):
         try:
-            with open("data.json", "r") as file:
-                return json.load(file)
+            with open("account.json", "r") as file:
+                data = json.load(file)
+                # Ensure that SaveCredentials is set to False if not in the data
+                if "SaveCredentials" not in data:
+                    data["SaveCredentials"] = False
+                return data
         except Exception as e:
-            messagebox.showerror("Erro", f"Erro ao ler dados: {e}")
+            messagebox.showerror("Error", f"Error reading data: {e}")
     return None
 
-def read_config():
-    if os.path.exists("config.json"):
-        try:
-            with open("config.json", "r") as file:
-                return json.load(file)
-        except Exception as e:
-            messagebox.showerror("Erro", f"Erro ao ler configuração: {e}")
-    return {}
-
-def on_submit():
+def on_login_submit():
     email = entry_email.get()
-    senha = entry_senha.get()
-    
-    if not senha:
-        messagebox.showwarning("Aviso", "A senha não pode estar vazia.")
+    password = entry_password.get()
+
+    if not password:
+        messagebox.showwarning("Warning", "Password cannot be empty.")
         return
+
+    user = verify_login(email, password)
+    if user:
+        if save_credentials.get():
+            save_data(email, password)
+        messagebox.showinfo("Welcome", "Login successful!")
+        create_config_interface()
+    else:
+        messagebox.showwarning("Warning", "Invalid email or password.")
+
+def on_register_submit():
+    email = entry_register_email.get()
+    password = entry_register_password.get()
     
-    if validar_email(email):
-        salvar_dados(email, senha)
-        criar_interface_config()  # Open config interface
-        root.withdraw()  # Hide the login interface
+    if not password:
+        messagebox.showwarning("Warning", "Password cannot be empty.")
+        return
+
+    if validate_email(email):
+        add_hwid(get_hwid(), email, password)
+        messagebox.showinfo("Success", "Registration successful!")
+        register_window.destroy()  # Close the registration window
     else:
-        messagebox.showwarning("Aviso", "Email Inválido")
+        messagebox.showwarning("Warning", "Invalid email.")
 
-def open_relauncher():
-    exe = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
-    if os.path.exists(exe):
-        subprocess.run([exe])
-    else:
-        print(f"Erro: O arquivo {exe} não foi encontrado.")
+def validate_email(email):
+    pattern = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
+    return re.match(pattern, email) is not None
 
-def validar_email(email):
-    padrao = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
-    return re.match(padrao, email) is not None
+save_credentials = tk.BooleanVar()
 
-def verificar_login():
-    dados = read()
-    if dados:
-        current_hwid = get_hwid()
-        if dados["HWID"] != current_hwid:
-            messagebox.showwarning("HWID Mismatch", "O HWID deste computador não corresponde ao HWID salvo. Acesso negado.")
-            return  # Exit the function if HWID doesn't match
-        
-        messagebox.showinfo("Bem-vindo", "Login bem-sucedido!")
-        criar_interface_config()
-        root.withdraw()  # Hide the login window
-    else:
-        criar_interface_login()
-
-def criar_interface_login():
-    global entry_email, entry_senha
+def create_login_interface():
+    global entry_email, entry_password
 
     root.title("Login")
-    root.geometry("200x130")
-    centralizar_janela(root, 200, 130)
+    root.geometry("300x250")
+    center_window(root, 300, 250)
 
-    label_email = tk.Label(root, text="Digite o Email:")
-    label_email.pack()
+    # Clear existing widgets
+    for widget in root.winfo_children():
+        widget.destroy()
 
-    entry_email = tk.Entry(root)
-    entry_email.pack()
+    root.configure(bg='black')  # Set background to black
 
-    label_senha = tk.Label(root, text="Digite a Senha:")
-    label_senha.pack()
+    tk.Label(root, text="Enter Email:", bg='black', fg='white').pack(pady=(5, 0))
+    entry_email = tk.Entry(root, bg='darkgray', fg='white', bd=2, highlightbackground='white', highlightcolor='white')
+    entry_email.pack(pady=(0, 5))
 
-    entry_senha = tk.Entry(root, show='*')
-    entry_senha.pack()
+    tk.Label(root, text="Enter Password:", bg='black', fg='white').pack(pady=(5, 0))
+    entry_password = tk.Entry(root, show='*', bg='darkgray', fg='white', bd=2, highlightbackground='white', highlightcolor='white')
+    entry_password.pack(pady=(0, 10))
 
-    button_submit = tk.Button(root, text="Enviar", command=on_submit)
-    button_submit.pack()
+    # Create checkbox with green checkmark
+    tk.Checkbutton(root, text="Save credentials", variable=save_credentials, bg='gray', fg='black', selectcolor='white').pack(pady=(5, 10))
 
-def criar_interface_config():
-    config_window = tk.Toplevel(root)
-    config_window.title("Configurações")
-    config_window.geometry("300x200")
-    centralizar_janela(config_window, 300, 200)
+    button_login = tk.Button(root, text="Login", command=on_login_submit, bg='white', fg='black')
+    button_login.pack(pady=(5, 10))
 
-    tk.Label(config_window, text="Configurações:").pack()
+    button_register = tk.Button(root, text="Register", command=create_register_interface, bg='white', fg='black')
+    button_register.pack(pady=(5, 20))
 
-    # Retrieve existing configuration
-    config_data = read_config()
+    saved_data = read_data()
+    if saved_data:
+        entry_email.insert(0, saved_data["Email"])
+        entry_password.insert(0, saved_data["Password"])
+        save_credentials.set(saved_data.get("SaveCredentials", False))
 
-    # Add fields for configuration
-    tk.Label(config_window, text="Config 1:").pack()
-    entry_config1 = tk.Entry(config_window)
-    entry_config1.pack()
-    entry_config1.insert(0, config_data.get("Config1", ""))  # Pre-fill if exists
 
-    tk.Label(config_window, text="Config 2:").pack()
-    entry_config2 = tk.Entry(config_window)
-    entry_config2.pack()
-    entry_config2.insert(0, config_data.get("Config2", ""))  # Pre-fill if exists
+def create_register_interface():
+    global entry_register_email, entry_register_password, register_window
 
-    def auto_save_config(*args):
-        config_data = {
-            "Config1": entry_config1.get(),
-            "Config2": entry_config2.get()
-        }
-        salvar_config(config_data)
+    register_window = tk.Toplevel(root)
+    register_window.title("Registration")
+    register_window.geometry("300x200")
+    center_window(register_window, 300, 200)
 
-    # Bind the auto-save function to changes in the entry fields
-    entry_config1.bind("<KeyRelease>", auto_save_config)
-    entry_config2.bind("<KeyRelease>", auto_save_config)
+    register_window.configure(bg='black')  # Set background to black
 
-def centralizar_janela(janela, largura, altura):
-    largura_tela = janela.winfo_screenwidth()
-    altura_tela = janela.winfo_screenheight()
-    pos_x = (largura_tela // 2) - (largura // 2)
-    pos_y = (altura_tela // 2) - (altura // 2)
+    tk.Label(register_window, text="Enter Email:", bg='black', fg='white').pack(pady=(5, 0))
+    entry_register_email = tk.Entry(register_window, bg='darkgray', fg='white', bd=2, highlightbackground='white', highlightcolor='white')
+    entry_register_email.pack(pady=(0, 5))
+
+    tk.Label(register_window, text="Enter Password:", bg='black', fg='white').pack(pady=(5, 0))
+    entry_register_password = tk.Entry(register_window, show='*', bg='darkgray', fg='white', bd=2, highlightbackground='white', highlightcolor='white')
+    entry_register_password.pack(pady=(0, 10))
+
+    button_register = tk.Button(register_window, text="Register", command=on_register_submit, bg='white', fg='black')
+    button_register.pack(pady=(5, 20))
+
+def create_config_interface():
+    root.withdraw()
+    exe = "ReLauncherRoblox.exe"
+    exe_path = os.path.join(os.path.dirname(__file__), exe)
+
+    if os.path.exists(exe_path):
+        subprocess.run([exe_path])
+    else:
+        print(f"Error: The file {exe} was not found.")
+
+def center_window(window, width, height):
+    screen_width = window.winfo_screenwidth()
+    screen_height = window.winfo_screenheight()
+    pos_x = (screen_width // 2) - (width // 2)
+    pos_y = (screen_height // 2) - (height // 2)
     
-    janela.geometry(f"{largura}x{altura}+{pos_x}+{pos_y}")
+    window.geometry(f"{width}x{height}+{pos_x}+{pos_y}")
 
-# Iniciar a aplicação
-    
-root = tk.Tk()
-verificar_login()
+# Start the application
+create_database()
+create_login_interface()
 root.mainloop()
