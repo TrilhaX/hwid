@@ -6,7 +6,7 @@ import tkinter as tk
 from tkinter import messagebox
 import os
 import re
-import hashlib
+import bcrypt
 import subprocess
 
 root = tk.Tk()
@@ -18,7 +18,12 @@ def get_hwid():
     return hwid
 
 def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+    # Gera um salt e hash a senha
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password.encode(), salt).decode()
+
+def verify_password(stored_password, provided_password):
+    return bcrypt.checkpw(provided_password.encode(), stored_password.encode())
 
 def create_database():
     conn = sqlite3.connect('users.db')
@@ -47,10 +52,13 @@ def add_hwid(hwid, email, password):
 def verify_login(email, password):
     conn = sqlite3.connect('users.db')
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM users WHERE email = ? AND password = ?', (email, hash_password(password)))
-    user = cursor.fetchone()
+    cursor.execute('SELECT password FROM users WHERE email = ?', (email,))
+    stored_password = cursor.fetchone()
     conn.close()
-    return user
+
+    if stored_password:
+        return verify_password(stored_password[0], password)
+    return False
 
 def save_data(email, password):
     hwid = get_hwid()
@@ -87,12 +95,11 @@ def on_login_submit():
         messagebox.showwarning("Warning", "Password cannot be empty.")
         return
 
-    user = verify_login(email, password)
-    if user:
+    if verify_login(email, password):
         if save_credentials.get():
             save_data(email, password)
         messagebox.showinfo("Welcome", "Login successful!")
-        messagebox.showifo("W.I.P", "Soon!")
+        messagebox.showinfo("W.I.P", "Soon!")
     else:
         messagebox.showwarning("Warning", "Invalid email or password.")
 
@@ -151,7 +158,6 @@ def create_login_interface():
         entry_password.insert(0, saved_data["Password"])
         save_credentials.set(saved_data.get("SaveCredentials", False))
 
-
 def create_register_interface():
     global entry_register_email, entry_register_password, register_window
 
@@ -172,16 +178,6 @@ def create_register_interface():
 
     button_register = tk.Button(register_window, text="Register", command=on_register_submit, bg='white', fg='black')
     button_register.pack(pady=(5, 20))
-
-def create_config_interface():
-    root.withdraw()
-    exe = ""
-    exe_path = os.path.join(os.path.dirname(__file__), exe)
-
-    if os.path.exists(exe_path):
-        subprocess.run([exe_path])
-    else:
-        print(f"Error: The file {exe} was not found.")
 
 def center_window(window, width, height):
     screen_width = window.winfo_screenwidth()
