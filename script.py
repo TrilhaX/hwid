@@ -50,14 +50,20 @@ def add_hwid(hwid, email, password):
         conn.close()
 
 def verify_login(email, password):
+    hwid = get_hwid()  # Obtém o HWID do dispositivo atual
     conn = sqlite3.connect('users.db')
     cursor = conn.cursor()
-    cursor.execute('SELECT password FROM users WHERE email = ?', (email,))
-    stored_password = cursor.fetchone()
+    cursor.execute('SELECT hwid, password FROM users WHERE email = ?', (email,))
+    stored_data = cursor.fetchone()
     conn.close()
 
-    if stored_password:
-        return verify_password(stored_password[0], password)
+    if stored_data:
+        stored_hwid, stored_password = stored_data
+        if hwid == stored_hwid:
+            return verify_password(stored_password, password)
+        else:
+            messagebox.showwarning("Warning", "HWID mismatch. Access denied.")
+            return False
     return False
 
 def save_data(email, password):
